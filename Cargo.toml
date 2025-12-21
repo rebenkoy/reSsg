@@ -1,0 +1,36 @@
+[package]
+name = "reSsg"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+clap = { version = "4.5.53", features = ["derive", "string"] }
+toml = "0.9.10+spec-1.1.0"
+sha1 = "0.11.0-rc.3"
+hex = "0.4.3"
+minijinja = { version = "2.14.0", features = ["loader", "deserialization"] }
+anyhow = "1.0.100"
+itertools = "0.14.0"
+markdown = "1.0.0"
+actix-web = "4.12.1"
+env_logger = "0.11.8"
+futures = "0.3.31"
+derive_more = "2.1.0"
+percent-encoding = "2.3.2"
+bitflags = "2.10.0"
+mime_guess = "2.0.5"
+rsfs = "0.4.1"
+actix-service = "2.0.3"
+futures-core = "0.3.31"
+log = "0.4.29"
+mime = "0.3.17"
+actix-utils = "3.0.1"
+kuchikiki = "0.8.2"
+markup5ever = "0.11.0"
+notify-debouncer-full = "0.6.0"
+notify = "8.2.0"
+async-std = "1.13.2"
+actix-ws = "0.3.0"
+futures-util = "0.3.31"
+flume = { version = "0.12.0", features = ["async"]}

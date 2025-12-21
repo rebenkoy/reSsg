@@ -1,0 +1,21 @@
+[server]
+watch_excludes = []
+
+[server.control]
+Prefix = "/control"
+
+[server.output]
+port = "8080"
+interface = "127.0.0.1"
+
+[build]
+source = "sources"
+index_toml_name = "index.toml"
+output = ".public"
+prefix = "/out"
+static_path = "static"
+static_output = "static"
+
+[build.sass]
+source = "sass"
+destination = "css"
