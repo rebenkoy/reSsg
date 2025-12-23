@@ -9,6 +9,7 @@ use std::sync::{Arc, RwLock};
 use actix_web::{App, HttpServer, Scope};
 use actix_web::dev::Server;
 use actix_web::middleware::Logger;
+use anyhow::Error;
 use futures::{FutureExt, StreamExt, TryFutureExt};
 use futures::future::Either;
 use rsfs::GenFS;
@@ -68,7 +69,12 @@ async fn no_autoreload_serve(config: reSsgConfig) -> anyhow::Result<()> {
 }
 async fn single_server_serve(config: reSsgConfig, socket_prefix: String) -> anyhow::Result<()>  {
     let mut fs = rsfs::mem::FS::new();
-    build(&config.build, &mut fs).map_err(anyhow::Error::from_boxed)?;
+    match build(&config.build, &mut fs).map_err(anyhow::Error::from_boxed) {
+        Ok(_) => {}
+        Err(e) => {
+            log::error!("{}", e);
+        }
+    }
     let fs = Arc::new(RwLock::new(fs));
     let (rx, watcher) = watcher::build_watcher_tread(&config, fs.clone())?;
 

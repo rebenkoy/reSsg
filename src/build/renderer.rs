@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
+use anyhow::anyhow;
 use itertools::Itertools;
 use minijinja::value::Object;
 use crate::config::BuildConfig;
@@ -24,8 +25,8 @@ impl RendererState {
             s: Mutex::new(_RendererState::new(p))
         }
     }
-    pub fn get(&self) -> MutexGuard<'_, _RendererState> {
-        self.s.lock().unwrap()
+    pub fn get(&self) -> anyhow::Result<MutexGuard<'_, _RendererState>> {
+        self.s.lock().map_err(|e| anyhow!("Could not lock renderer state"))
     }
 
 }

@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use anyhow::anyhow;
 use minijinja::{Error, State, Value};
 use serde::de::Error as _;
 use crate::build::renderer::{RendererState, RENDERER_STATE};
@@ -7,7 +8,12 @@ pub fn static_ref(state: &State, file: String) -> Result<Value, Error> {
     let state_binding= state.lookup(RENDERER_STATE).ok_or_else(|| {
         Error::custom(format!("`{}` variable not found in env", RENDERER_STATE))
     })?;
-    let locked_state = state_binding.downcast_object_ref::<RendererState>().unwrap().get();
+    let locked_state = state_binding.downcast_object_ref::<RendererState>()
+        .ok_or(anyhow!("No renderer state is present"))
+        .and_then(|x| x.get())
+        .map_err(|e|{
+        Error::custom(e)
+    })?;
     let config = &locked_state.config;
     let static_hashes = &locked_state.static_hashes;
 

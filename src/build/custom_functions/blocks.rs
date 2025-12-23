@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use anyhow::anyhow;
 use markdown::{Constructs, ParseOptions};
-use markdown::mdast::Node;
+use markdown::mdast::{Html, Text, Node};
 use minijinja::{Error, State, Value};
 use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
@@ -96,23 +97,44 @@ impl ContextBuilder {
                 match &self.current_section {
                     None => Err(Error::custom("No heading for paragraph found.")),
                     Some(heading) => {
-                        let [data] = data.children.try_into().map_err(|e| Error::custom("Multiple paragraph children not supported."))?;
-                        match data {
-                            Node::Text(text) => {
-                                match self.data.get_mut(heading) {
-                                    None => {
-                                        self.data.insert(heading.to_string(), text.value);
-                                    }
-                                    Some(value) => {
-                                        value.push_str(&text.value);
+                        let mut err = false;
+                        for data in data.children.into_iter() {
+                            match data {
+                                Node::Text(Text {value: text, ..}) | Node::Html(Html {value: text, ..}) => {
+                                    match self.data.get_mut(heading) {
+                                        None => {
+                                            self.data.insert(heading.to_string(), text);
+                                        }
+                                        Some(value) => {
+                                            value.push_str(&text);
+                                        }
                                     }
                                 }
-                                Ok(())
-                            }
-                            _ => {
-                                Err(Error::custom("Heading must contain exactly one Text node."))
+                                _ => {
+                                    err = true
+                                }
                             }
                         }
+                        match err {
+                            false => Ok(()),
+                            true => Err(Error::custom("Could not parse document")),
+                        }
+                    }
+                }
+            }
+            Node::Html(data) => {
+                match &self.current_section {
+                    None => Err(Error::custom("No heading for paragraph found.")),
+                    Some(heading) => {
+                        match self.data.get_mut(heading) {
+                            None => {
+                                self.data.insert(heading.to_string(), data.value);
+                            }
+                            Some(value) => {
+                                value.push_str(&data.value);
+                            }
+                        }
+                        Ok(())
                     }
                 }
             }
@@ -146,12 +168,19 @@ pub struct Context {
 
 pub fn blocks(state: &State, mut dir: String, default_template: Option<String>) -> Result<Value, Error> {
     if dir.starts_with("./") {
-        dir = PathBuf::from(state.name()).parent().unwrap_or(Path::new("../../..")).join(dir).to_str().unwrap().to_string();
+        dir = PathBuf::from(state.name()).parent().unwrap_or(Path::new("../../..")).join(dir).to_str().ok_or(
+            Error::custom("Not a valid unicode")
+        )?.to_string();
     }
     let state_binding= state.lookup(RENDERER_STATE).ok_or_else(|| {
         Error::custom(format!("`{}` variable not found in env", RENDERER_STATE))
     })?;
-    let target_root = &state_binding.downcast_object_ref::<RendererState>().unwrap().get().target_path.clone();
+    let target_root = &state_binding.downcast_object_ref::<RendererState>()
+        .ok_or(anyhow!("No renderer state is present"))
+        .and_then(|x| x.get())
+        .map_err(|e|{
+        Error::custom(e)
+    })?.target_path.clone();
 
     let blocks_dir = target_root.join(dir);
     if !blocks_dir.exists() {
@@ -178,7 +207,9 @@ pub fn blocks(state: &State, mut dir: String, default_template: Option<String>) 
     for entry in itertools::sorted(files.into_iter()) {
         if let Some(ext) = entry.extension() && ext == "html"  {
             let entry = entry.strip_prefix(target_root.as_path()).map_err(|_| Error::custom(format!("Failed to strip prefix `{}` for `{}` .", target_root.display(), entry.display())))?;
-            results.push(state.env().get_template(entry.to_str().unwrap())?.render(())?);
+            results.push(state.env().get_template(entry.to_str().ok_or(
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "Not utf-8 path")
+            ).map_err(|e| {Error::custom(format!("{}", e))})?)?.render(())?);
             continue;
         }
         let content = markdown::to_mdast(&std::fs::read_to_string(&entry).map_err(map_io_error)?, &ParseOptions {
@@ -188,7 +219,7 @@ pub fn blocks(state: &State, mut dir: String, default_template: Option<String>) 
                 ..Constructs::default()
             },
             ..ParseOptions::default()
-        }).unwrap();
+        }).map_err(|e| {Error::custom(format!("{}", e))})?;
         let content = match content {
             Node::Root(c) => {c}
             _ => {

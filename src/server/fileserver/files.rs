@@ -32,7 +32,7 @@ use rsfs::{File, FileType, GenFS, Metadata};
 use crate::server::fileserver::path_buf::PathBufWrap;
 
 pub trait ContentMapper {
-    fn map(&self, content: NodeRef) -> NodeRef;
+    fn map(&self, req: &HttpRequest, path: &PathBuf, content: NodeRef) -> NodeRef;
 }
 
 pub struct Files<FS: GenFS> {

@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::mpsc::TryRecvError;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use anyhow::{anyhow, Context};
+use anyhow::{anyhow, Context, Error};
 use futures::FutureExt;
 use crate::config::reSsgConfig;
 use notify_debouncer_full::{new_debouncer, notify::RecursiveMode, DebounceEventHandler, DebounceEventResult, DebouncedEvent, Debouncer, RecommendedCache};
@@ -25,7 +25,12 @@ pub type EmittedEvent = Vec<(EventKind, Vec<PathBuf>)>;
 async fn changes_handler(events: EmittedEvent, socket_sender: &mut flume::Sender<EmittedEvent>, config: &reSsgConfig, fs: &Arc<RwLock<rsfs::mem::FS>>) -> anyhow::Result<()> {
     println!("Got events: {:?}, rebuilding", events);
     let mut new_fs = rsfs::mem::FS::new();
-    build(&config.build, &mut new_fs).map_err(|e| anyhow!(e.to_string()))?;
+    match build(&config.build, &mut new_fs).map_err(|e| anyhow!(e.to_string())) {
+        Ok(_) => {}
+        Err(e) => {
+            log::error!("Error while building new files: {}", e);
+        }
+    }
     let mut guard = fs.write().map_err(|e| anyhow!(e.to_string()))?;
     *guard = new_fs;
     socket_sender.send_async(events).await?;

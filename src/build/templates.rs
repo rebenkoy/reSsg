@@ -15,10 +15,14 @@ fn locate_targets(config: &BuildConfig) -> Result<HashMap<PathBuf, BuildTarget>,
     fn _locate_targets(config: &BuildConfig, path: &PathBuf, map: &mut HashMap<PathBuf, BuildTarget>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         if path.is_dir() {
             for entry in fs::read_dir(path)? {
-                _locate_targets(config, &entry.unwrap().path(), map)?;
+                _locate_targets(config, &entry?.path(), map)?;
             }
         } else if path.is_file() {
-            if path.file_name().unwrap().to_str().unwrap() == config.index_toml_name {
+            if path.file_name()
+                .ok_or(std::io::Error::new(std::io::ErrorKind::Other, "Filename ends with .."))?
+                .to_str()
+                .ok_or(std::io::Error::new(std::io::ErrorKind::Other, "Filename ends with .."))?
+                == config.index_toml_name {
                 map.insert(path.clone(), BuildTarget::new(path.clone())?);
             }
         }
@@ -48,8 +52,10 @@ impl BuildTarget {
             path,
         })
     }
-    pub fn dir(&self) -> PathBuf {
-        self.path.parent().unwrap().to_path_buf()
+    pub fn dir(&self) -> std::io::Result<PathBuf> {
+        Ok(self.path.parent().ok_or(
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "No parent dir found")
+        )?.to_path_buf())
     }
 }
 
@@ -59,7 +65,11 @@ fn validate_targets(targets: &HashMap<PathBuf, BuildTarget>) -> Result<(), Box<d
         if let Some(conflict) = dests.get(&target.config.path) {
             return Err(anyhow!(
                 "Conflicting destination `{}`. first reserved in: `{}`, attempted to reserve in: `{}`",
-                target.config.path, conflict.path.to_str().unwrap(), target.path.to_str().unwrap()
+                target.config.path, conflict.path.to_str().ok_or(
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Not utf-8 path")
+                )?, target.path.to_str().ok_or(
+                    std::io::Error::new(std::io::ErrorKind::InvalidInput, "Not utf-8 path")
+                )?
             ).into_boxed_dyn_error())
         }
         dests.insert(target.config.path.clone(), target);
@@ -81,9 +91,9 @@ pub fn build_templates<FS: GenFS>(config: &BuildConfig, static_hashes: &HashMap<
 }
 
 fn prepare_target_env<'a>(config: &BuildConfig, static_hashes: &HashMap<PathBuf, String>, target: &'a BuildTarget) -> Result<Environment<'a>, Box<dyn std::error::Error + Send + Sync>> {
-    fn setup_loader(env: &mut Environment, config: &BuildConfig, target: &BuildTarget) {
+    fn setup_loader(env: &mut Environment, config: &BuildConfig, target: &BuildTarget) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let root_loader = minijinja::path_loader(&config.source);
-        let target_loader = minijinja::path_loader(target.dir());
+        let target_loader = minijinja::path_loader(target.dir()?);
 
         env.set_loader(move |name| {
             Ok(if name.starts_with("~/") {
@@ -93,23 +103,25 @@ fn prepare_target_env<'a>(config: &BuildConfig, static_hashes: &HashMap<PathBuf,
                 .or(target_loader(name)?)
             )
         });
+        Ok(())
     }
     fn setup_filters(env: &mut Environment, config: &BuildConfig) {}
     fn setup_functions(env: &mut Environment, config: &BuildConfig) {
         env.add_function("blocks", blocks);
         env.add_function("static", static_ref);
     }
-    fn setup_state(env: &mut Environment, config: &BuildConfig, target: &BuildTarget, static_hashes: &HashMap<PathBuf, String>) {
+    fn setup_state(env: &mut Environment, config: &BuildConfig, target: &BuildTarget, static_hashes: &HashMap<PathBuf, String>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         env.add_global(RENDERER_STATE, Value::from_object(RendererState::new(RendererStateParams {
             config: config.clone(),
-            target_path: target.dir().to_path_buf(),
+            target_path: target.dir()?.to_path_buf(),
             static_hashes: static_hashes.clone(),
         })));
+        Ok(())
     }
 
     let mut env = Environment::new();
-    setup_state(&mut env, &config, &target, static_hashes);
-    setup_loader(&mut env, &config, &target);
+    setup_state(&mut env, &config, &target, static_hashes)?;
+    setup_loader(&mut env, &config, &target)?;
     setup_filters(&mut env, &config);
     setup_functions(&mut env, &config);
     Ok(env)

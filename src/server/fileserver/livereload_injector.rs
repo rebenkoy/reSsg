@@ -1,8 +1,10 @@
 use std::fmt::format;
+use std::path::{Path, PathBuf, StripPrefixError};
+use actix_web::HttpRequest;
 use kuchikiki::{NodeRef, ExpandedName, Attribute};
 use markup5ever::{local_name, ns, namespace_url, QualName};
 use mime::HTML;
-use crate::config::{ControlConfig, ServerConfig};
+use crate::config::{reSsgConfig, ControlConfig, ServerConfig};
 use crate::server::fileserver::files::ContentMapper;
 
 
@@ -57,16 +59,18 @@ ______setup_autoreload();
 
 
 pub struct LivereloadInjector {
+    output: String,
+    static_home: String,
     js: Option<String>,
 }
 
 impl LivereloadInjector {
-    pub fn new(server_config: &ServerConfig) -> Self {
-        let js = match &server_config.control {
+    pub fn new(config: &reSsgConfig) -> Self {
+        let js = match &config.server.control {
             ControlConfig::None => {None}
             ControlConfig::Endpoint(endpoint) => {
                 let mut js = SCRIPT.to_string();
-                if endpoint.interface != server_config.output.interface {
+                if endpoint.interface != config.server.output.interface {
                     js = js.replace("let hostname = window.location.hostname;", format!(r#"let hostname = "{}";"#, endpoint.interface).as_str());
                 }
                 js = js.replace("let port = window.location.port;", format!(r#"let port = "{}";"#, endpoint.interface).as_str());
@@ -79,13 +83,26 @@ impl LivereloadInjector {
             }
         };
         Self {
+            output: config.build.output.clone(),
+            static_home: config.build.static_output.clone(),
             js,
+
         }
     }
 }
 
 impl ContentMapper for LivereloadInjector {
-    fn map(&self, content: NodeRef) -> NodeRef {
+    fn map(&self, req: &HttpRequest, path: &PathBuf, content: NodeRef) -> NodeRef {
+        match path.strip_prefix(format!("/{}", &self.output)) {
+            Ok(path) => {
+                if path.starts_with(&self.static_home) {
+                    return content;
+                }
+            }
+            Err(_) => {
+                return content;
+            }
+        }
         let js = match &self.js {
             Some(js_src) => js_src,
             None => {return content}

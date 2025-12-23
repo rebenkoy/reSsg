@@ -2161,6 +2161,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "hex",
+ "html5ever",
  "itertools",
  "kuchikiki",
  "log",

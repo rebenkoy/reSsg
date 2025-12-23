@@ -19,7 +19,7 @@ pub fn build_output_scope(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>) 
                 fs,
             )
                 .content_mappers(vec![
-                    Arc::new(LivereloadInjector::new(&config.server))
+                    Arc::new(LivereloadInjector::new(&config))
                 ])
         )
 }

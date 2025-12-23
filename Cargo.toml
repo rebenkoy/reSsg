@@ -34,3 +34,4 @@ async-std = "1.13.2"
 actix-ws = "0.3.0"
 futures-util = "0.3.31"
 flume = { version = "0.12.0", features = ["async"]}
+html5ever = "0.26.0"

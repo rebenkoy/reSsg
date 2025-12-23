@@ -16,6 +16,7 @@ use actix_web::{
 use bitflags::bitflags;
 use derive_more::{Deref, DerefMut};
 use kuchikiki::traits::TendrilSink;
+use markup5ever::serialize::TraversalScope::IncludeNode;
 use mime::Mime;
 use rsfs::{File, GenFS, Metadata};
 use crate::server::fileserver::files::ContentMapper;
@@ -355,22 +356,31 @@ impl<F: File> NamedFile<F> {
             return res.status(StatusCode::INTERNAL_SERVER_ERROR).finish()
         }
 
-        bytes = match String::try_from(bytes) {
-            Ok(string) => {
-                let mut html = kuchikiki::parse_html().one(string);
-                for mapper in content_mappers {
-                    html = mapper.map(html);
-                }
-                let mut buff = Vec::new();
-                if html.serialize(&mut buff).is_err() {
-                    return res.status(StatusCode::INTERNAL_SERVER_ERROR).finish();
-                }
-                buff
+        if let Some(e) = self.path.extension() {
+            if e == "html" {
+                bytes = match String::try_from(bytes) {
+                    Ok(string) => {
+                        let mut html = kuchikiki::parse_html().one(string);
+                        for mapper in content_mappers {
+                            html = mapper.map(&req, &self.path, html);
+                        }
+                        let mut buff = Vec::new();
+
+                        if html5ever::serialize(&mut buff, &html, html5ever::serialize::SerializeOpts {
+                            traversal_scope: IncludeNode,
+                            create_missing_parent: false,
+                            ..Default::default()
+                        }).is_err() {
+                            return res.status(StatusCode::INTERNAL_SERVER_ERROR).finish();
+                        }
+                        buff
+                    }
+                    Err(e) => {
+                        e.into_bytes()
+                    }
+                };
             }
-            Err(e) => {
-                e.into_bytes()
-            }
-        };
+        }
 
         res.body(bytes)
     }
