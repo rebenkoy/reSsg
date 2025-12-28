@@ -49,7 +49,7 @@ fn build_output_server(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>) -> 
 
 async fn no_autoreload_serve(config: reSsgConfig) -> anyhow::Result<()> {
     let mut fs = rsfs::mem::FS::new();
-    build(&config.build, &mut fs).map_err(anyhow::Error::from_boxed)?;
+    build(&config.build, &mut fs)?;
     let fs = Arc::new(RwLock::new(fs));
     let (_, watcher) = watcher::build_watcher_tread(&config, fs.clone())?;
 
@@ -69,7 +69,7 @@ async fn no_autoreload_serve(config: reSsgConfig) -> anyhow::Result<()> {
 }
 async fn single_server_serve(config: reSsgConfig, socket_prefix: String) -> anyhow::Result<()>  {
     let mut fs = rsfs::mem::FS::new();
-    match build(&config.build, &mut fs).map_err(anyhow::Error::from_boxed) {
+    match build(&config.build, &mut fs) {
         Ok(_) => {}
         Err(e) => {
             log::error!("{}", e);
@@ -107,7 +107,7 @@ async fn single_server_serve(config: reSsgConfig, socket_prefix: String) -> anyh
 }
 async fn multi_server_serve(config: reSsgConfig, socket_config: EndpointConfig) -> anyhow::Result<()> {
     let mut fs = rsfs::mem::FS::new();
-    build(&config.build, &mut fs).map_err(anyhow::Error::from_boxed)?;
+    build(&config.build, &mut fs)?;
     let fs = Arc::new(RwLock::new(fs));
     let (rx, watcher) = watcher::build_watcher_tread(&config, fs.clone())?;
 

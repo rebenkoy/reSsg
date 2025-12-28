@@ -2,6 +2,7 @@ mod config;
 mod build;
 mod cli_parser;
 mod server;
+mod util;
 
 use clap::{Parser, Subcommand};
 use crate::build::build;

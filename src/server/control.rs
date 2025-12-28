@@ -6,6 +6,7 @@ use futures_util::{SinkExt, StreamExt as _};
 use futures_util::task::SpawnExt;
 use flume::Receiver;
 use futures_util::future::Either;
+use log::info;
 
 pub fn build_control_scope<T: Clone + 'static>(rx: Receiver<T>) -> Scope {
     Scope::new("")
@@ -31,7 +32,7 @@ impl<T: Clone + 'static> WSHandler<T> {
                                 }
                             }
 
-                            Message::Text(msg) => println!("Got text: {msg}"),
+                            Message::Text(msg) => info!("Got websocket message, ignoring: {msg}"),
                             _ => break,
                         }
                     }

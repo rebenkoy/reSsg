@@ -1,13 +1,12 @@
 use std::fmt::format;
 use std::path::{Path, PathBuf, StripPrefixError};
 use actix_web::HttpRequest;
-use kuchikiki::{NodeRef, ExpandedName, Attribute};
 use markup5ever::{local_name, ns, namespace_url, QualName};
+use markup5ever_rcdom::RcDom;
 use mime::HTML;
 use crate::config::{reSsgConfig, ControlConfig, ServerConfig};
 use crate::server::fileserver::files::ContentMapper;
-
-
+use crate::util::html::{append_text, create_element, HTML};
 
 static SCRIPT: &str = r#"
 function ______setup_autoreload() {
@@ -92,7 +91,7 @@ impl LivereloadInjector {
 }
 
 impl ContentMapper for LivereloadInjector {
-    fn map(&self, req: &HttpRequest, path: &PathBuf, content: NodeRef) -> NodeRef {
+    fn map(&self, req: &HttpRequest, path: &PathBuf, content: HTML) -> HTML {
         match path.strip_prefix(format!("/{}", &self.output)) {
             Ok(path) => {
                 if path.starts_with(&self.static_home) {
@@ -114,13 +113,13 @@ impl ContentMapper for LivereloadInjector {
         let head = match html.as_node().select_first("head") {
             Ok(head) => head.as_node().clone(),
             Err(_) => {
-                let new_head = NodeRef::new_element(QualName::new(None, ns!(html), local_name!("head")), None);
+                let new_head = create_element("head".to_string(), vec![]);
                 html.as_node().prepend(new_head.clone());
                 new_head
             },
         };
-        let script = NodeRef::new_element(QualName::new(None, ns!(html), local_name!("script")), []);
-        script.append(NodeRef::new_text(js));
+        let mut script = create_element("script".to_string(), vec![]);
+        append_text(&mut script, js);
         head.prepend(script);
 
         content

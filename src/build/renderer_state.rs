@@ -3,10 +3,30 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use anyhow::anyhow;
 use itertools::Itertools;
+use minijinja::{Error, State};
 use minijinja::value::Object;
+use serde::de::Error as _;
+
 use crate::config::BuildConfig;
 
 pub static RENDERER_STATE: &str = "RENDERER_STATE";
+
+
+pub fn get_state(state: &State) -> Result<Arc<RendererState>, Error> {
+    let state_binding = state.lookup(RENDERER_STATE).ok_or_else(|| {
+        Error::custom(format!("`{}` variable not found in env", RENDERER_STATE))
+    })?;
+    let locked_state = state_binding.downcast_object::<RendererState>()
+        .ok_or(anyhow!("No renderer state is present"))
+        .map_err(|e| {
+            Error::custom(e)
+        })?;
+    Ok(locked_state)
+}
+
+pub fn lock_state(arc: &Arc<RendererState>) -> Result<MutexGuard<_RendererState>, Error> {
+    Ok(arc.get().map_err(|e| Error::custom(e))?)
+}
 
 #[derive(Debug)]
 pub struct RendererStateParams {

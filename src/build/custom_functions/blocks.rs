@@ -1,14 +1,16 @@
+use std::borrow::Cow;
 use std::collections::HashMap;
-use std::ffi::OsStr;
+use std::ops::{Deref, Range};
 use std::path::{Path, PathBuf};
-use anyhow::anyhow;
-use markdown::{Constructs, ParseOptions};
-use markdown::mdast::{Html, Text, Node};
+use actix_web::web::head;
+use clap::builder::Str;
 use minijinja::{Error, State, Value};
+use pulldown_cmark::{CowStr, Event, HeadingLevel, MetadataBlockKind, Tag, TagEnd};
+use pulldown_cmark_to_cmark::{cmark, Error as CmarkError};
 use serde::de::Error as _;
 use serde::{Deserialize, Serialize};
 use toml::Table;
-use crate::build::renderer::{RendererState, RENDERER_STATE};
+use crate::build::renderer_state::{get_state, lock_state, RendererState, RENDERER_STATE};
 
 pub struct IOError {
     e: std::io::Error,
@@ -48,105 +50,171 @@ pub fn map_io_error(e: std::io::Error) -> Error {
     IOError::from(e).into()
 }
 
-struct ContextBuilder {
-    template: Option<String>,
-    user_config: Option<toml::Table>,
-    first: bool,
-    data: HashMap<String, String>,
-    current_section: Option<String>,
+#[derive(Debug, Copy, Clone)]
+enum SectionType {
+    Literal,
+    HTML,
 }
+impl TryFrom<u8> for SectionType {
+    type Error = Error;
 
-impl ContextBuilder {
-    pub fn new(default_template: &Option<String>) -> Self {
-
-        Self {
-            template: default_template.clone(),
-            user_config: None,
-            first: true,
-            data: HashMap::new(),
-            current_section: None,
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(SectionType::Literal),
+            2 => Ok(SectionType::HTML),
+            _ => Err(Error::custom("Unknown heading type, currently only depth 0 (Literal) and depth 1 (HTML) are supported")),
         }
     }
-    pub fn add(&mut self, node: Node) -> Result<(), Error> {
-        let res = match node {
-            Node::Toml(data) => {
-                if !self.first {
-                    Err(Error::custom("Duplicating toml entry".to_string()))
-                } else {
-                    let mut table: Table = toml::from_str(data.value.as_str()).map_err(map_toml_error)?;
-                    if let Some(toml::Value::String(template)) = table.remove("template") {
-                        self.template = Some(template);
+}
+
+#[derive(Debug)]
+enum ParsingMode<'a> {
+    None,
+    Text{
+        events: Vec<Event<'a>>,
+        range: Option<Range<usize>>,
+    },
+    Frontmatter{
+        style: MetadataBlockKind,
+        events: Vec<Event<'a>>,
+    },
+    Heading{
+        section_type: SectionType,
+        level: HeadingLevel,
+        events: Vec<Event<'a>>,
+        id: Option<CowStr<'a>>,
+        classes: Vec<CowStr<'a>>,
+        attrs: Vec<(CowStr<'a>, Option<CowStr<'a>>)>,
+    },
+}
+
+struct Heading<'a> {
+    section_type: SectionType,
+    name: String,
+    id: Option<CowStr<'a>>,
+    classes: Vec<CowStr<'a>>,
+    attrs: Vec<(CowStr<'a>, Option<CowStr<'a>>)>,
+}
+
+struct HeadingData {
+    section_type: SectionType,
+    id: Option<String>,
+    classes: Vec<String>,
+    attrs: Vec<(String, Option<String>)>,
+}
+
+impl From<&Heading<'_>> for HeadingData {
+    fn from(heading: &Heading) -> Self {
+        let Heading { section_type, name, id, classes, attrs } = heading;
+        Self {
+            section_type: *section_type,
+            id: id.as_ref().map(|id| id.to_string()),
+            classes: classes.iter().map(|c| c.to_string()).collect(),
+            attrs: attrs.iter().map(|(a,v)| (a.to_string(), v.as_ref().map(|v| v.to_string()))).collect(),
+        }
+    }
+}
+struct ContextBuilder<'a> {
+    source: &'a String,
+    template: Option<String>,
+    user_config: Option<Table>,
+    data: HashMap<String, String>,
+    meta: HashMap<String, HeadingData>,
+    current_section: Option<Heading<'a>>,
+    parsing_mode: ParsingMode<'a>,
+}
+
+impl<'a> ContextBuilder<'a> {
+    pub fn new(source: &'a String, default_template: &Option<String>) -> Self {
+        Self {
+            source,
+            template: default_template.clone(),
+            user_config: None,
+            data: HashMap::new(),
+            meta: HashMap::new(),
+            current_section: None,
+            parsing_mode: ParsingMode::None,
+        }
+    }
+    fn finalize_section(&mut self) -> Result<(), Error> {
+        let mut mode = ParsingMode::None;
+        std::mem::swap(&mut self.parsing_mode, &mut mode);
+        match mode {
+            ParsingMode::None => {}
+            ParsingMode::Text { events, range } => {
+                let Some(range) = range else {
+                    if !events.is_empty() {
+                        return Err(Error::custom("Internal Error: Empty range in text section"));
                     }
-                    self.user_config = Some(table);
-                    Ok(())
-                }
-            }
-            Node::Heading(data) => {
-                let [data] = data.children.try_into().map_err(|e| Error::custom("Multiple heading children not supported."))?;
-                match data {
-                    Node::Text(text) => {
-                        self.current_section = Some(text.value);
-                        Ok(())
-                    }
-                    _ => {
-                        Err(Error::custom("Heading must contain exactly one Text node."))
-                    }
-                }
-            }
-            Node::Paragraph(data) => {
+                    return Ok(());
+                };
                 match &self.current_section {
-                    None => Err(Error::custom("No heading for paragraph found.")),
+                    None => {
+                        return Err(Error::custom("No section set for entry"))
+                    }
                     Some(heading) => {
-                        let mut err = false;
-                        for data in data.children.into_iter() {
-                            match data {
-                                Node::Text(Text {value: text, ..}) | Node::Html(Html {value: text, ..}) => {
-                                    match self.data.get_mut(heading) {
-                                        None => {
-                                            self.data.insert(heading.to_string(), text);
-                                        }
-                                        Some(value) => {
-                                            value.push_str(&text);
-                                        }
-                                    }
-                                }
-                                _ => {
-                                    err = true
-                                }
+                        match heading.section_type {
+                            SectionType::Literal => {
+                                self.data.insert(heading.name.clone(), self.source[range].to_string());
+                                self.meta.insert(heading.name.clone(), HeadingData::from(heading));
                             }
-                        }
-                        match err {
-                            false => Ok(()),
-                            true => Err(Error::custom("Could not parse document")),
+                            SectionType::HTML => {
+                                let mut html = String::new();
+                                pulldown_cmark::html::write_html_fmt(&mut html, events.into_iter())?;
+                                self.data.insert(heading.name.clone(), html);
+                                self.meta.insert(heading.name.clone(), HeadingData::from(heading));
+                            }
                         }
                     }
                 }
             }
-            Node::Html(data) => {
-                match &self.current_section {
-                    None => Err(Error::custom("No heading for paragraph found.")),
-                    Some(heading) => {
-                        match self.data.get_mut(heading) {
-                            None => {
-                                self.data.insert(heading.to_string(), data.value);
-                            }
-                            Some(value) => {
-                                value.push_str(&data.value);
-                            }
+            ParsingMode::Frontmatter { events, style } => {
+                let mut frontmatter = String::new();
+                for event in events {
+                    match event {
+                        Event::Text(text) => {
+                            frontmatter.push_str(&text);
                         }
-                        Ok(())
+                        _ => {return Err(Error::custom(format!("Invalid event in frontmatter: {:?}", event)))}
+                    }
+                }
+                match style {
+                    MetadataBlockKind::YamlStyle => {
+                        return Err(Error::custom("Yaml style frontmatter is not currently supported"));
+                    }
+                    MetadataBlockKind::PlusesStyle => {
+                        let mut table: Table = toml::from_str(&frontmatter).map_err(map_toml_error)?;
+                        if let Some(toml::Value::String(template)) = table.remove("template") {
+                            self.template = Some(template);
+                        }
+                        self.user_config = Some(table);
                     }
                 }
             }
-            _ => {
-                Err(Error::custom(format!("Unsupported node type: {:?}", node)))
+            ParsingMode::Heading { section_type, events, id, classes, attrs, .. } => {
+                let mut name = String::new();
+                for event in events {
+                    match event {
+                        Event::Text(text) => {
+                            name.push_str(&text);
+                        }
+                        _ => {return Err(Error::custom(format!("Invalid event in section name: {:?}", event)))}
+                    }
+                }
+                self.current_section = Some(Heading {
+                    section_type,
+                    name,
+                    id,
+                    classes,
+                    attrs,
+                })
             }
-        };
-        self.first = false;
-        res
+        }
+        Ok(())
     }
 
-    pub fn finalize(self, state: &State) -> Result<Context, Error> {
+    pub fn finalize(mut self, state: &State) -> Result<Context, Error> {
+        self.finalize_section()?;
         let mut data = HashMap::new();
         for (k, v) in self.data {
             data.insert(k, Value::from_safe_string(state.env().render_str(v.as_str(), ())?));
@@ -156,6 +224,88 @@ impl ContextBuilder {
             config: self.user_config.unwrap_or(Default::default()),
             data,
         })
+    }
+    pub fn handle(&mut self, node: Event<'a>, event_range: Range<usize>) -> Result<(), Error> {
+        match node {
+            Event::Start(Tag::MetadataBlock(style)) => {
+                self.finalize_section()?;
+                self.parsing_mode = ParsingMode::Frontmatter {
+                    style,
+                    events: Vec::new(),
+                };
+            }
+            Event::End(TagEnd::MetadataBlock(end_style)) => {
+                match &self.parsing_mode {
+                    ParsingMode::Frontmatter{ style, events } => {
+                        if !end_style.eq(style) {
+                            return Err(Error::custom("Internal Error: Frontmatter style mismatch"));
+                        }
+                        self.finalize_section()?;
+                        self.parsing_mode = ParsingMode::None;
+                    }
+                    _ => {
+                        return Err(Error::custom("Internal Error: Frontmatter ending without start"))
+                    }
+                }
+            }
+            Event::Start(Tag::Heading { level, id, classes, attrs }) => {
+                self.finalize_section()?;
+                let mut new_attrs = Vec::new();
+                let mut st = SectionType::Literal;
+                for (attr, val) in attrs {
+                    if "html".eq(attr.as_ref()) && val.is_none() {
+                        st = SectionType::HTML;
+                    } else {
+                        new_attrs.push((attr, val));
+                    }
+                }
+                self.parsing_mode = ParsingMode::Heading{
+                    level,
+                    id,
+                    classes,
+                    attrs: new_attrs,
+                    events: Vec::new(),
+                    section_type: st,
+                }
+            }
+            Event::End(TagEnd::Heading(end_level)) => {
+                match &self.parsing_mode {
+                    ParsingMode::Heading{ level, .. } => {
+                        if !end_level.eq(level) {
+                            return Err(Error::custom("Internal Error: Heading level mismatch"));
+                        }
+                    self.finalize_section()?;
+                        self.parsing_mode = ParsingMode::Text{ events: Vec::new(), range: None};
+                    }
+                    _ => {
+                        return Err(Error::custom("Internal Error: Heading ending without start"))
+                    }
+                }
+            }
+            Event::SoftBreak => {}
+            _ => {
+                match &mut self.parsing_mode {
+                    ParsingMode::Text { events, range } => {
+                        events.push(node);
+                        match range {
+                            None => {
+                                *range = Some(event_range);
+                            }
+                            Some(r) => {
+                                r.end = event_range.end;
+                            }
+                        }
+                    }
+                    ParsingMode::Frontmatter { events, ..} | ParsingMode::Heading { events, ..} => {
+                        events.push(node);
+                    }
+                    ParsingMode::None => {
+                        return Err(Error::custom("Internal Error: Encountered data node with ParsingMode::None."))
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -172,15 +322,12 @@ pub fn blocks(state: &State, mut dir: String, default_template: Option<String>) 
             Error::custom("Not a valid unicode")
         )?.to_string();
     }
-    let state_binding= state.lookup(RENDERER_STATE).ok_or_else(|| {
-        Error::custom(format!("`{}` variable not found in env", RENDERER_STATE))
-    })?;
-    let target_root = &state_binding.downcast_object_ref::<RendererState>()
-        .ok_or(anyhow!("No renderer state is present"))
-        .and_then(|x| x.get())
-        .map_err(|e|{
-        Error::custom(e)
-    })?.target_path.clone();
+
+    let renderer_state = get_state(state)?;
+    let locked_state = lock_state(&renderer_state)?;
+    let target_root = locked_state.target_path.clone();
+    drop(locked_state);
+    drop(renderer_state);
 
     let blocks_dir = target_root.join(dir);
     if !blocks_dir.exists() {
@@ -212,23 +359,20 @@ pub fn blocks(state: &State, mut dir: String, default_template: Option<String>) 
             ).map_err(|e| {Error::custom(format!("{}", e))})?)?.render(())?);
             continue;
         }
-        let content = markdown::to_mdast(&std::fs::read_to_string(&entry).map_err(map_io_error)?, &ParseOptions {
-            constructs: Constructs {
-                frontmatter: true,
-                heading_atx: true,
-                ..Constructs::default()
-            },
-            ..ParseOptions::default()
-        }).map_err(|e| {Error::custom(format!("{}", e))})?;
-        let content = match content {
-            Node::Root(c) => {c}
-            _ => {
-                return Err(Error::custom(format!("Can not find root node for file `{}`", entry.display())));
-            }
-        };
-        let mut context_builder = ContextBuilder::new(&default_template);
-        for node in content.children {
-            context_builder.add(node)?;
+
+        let text = std::fs::read_to_string(&entry).map_err(map_io_error)?;
+        let parser = pulldown_cmark::Parser::new_ext(&text, {
+            let mut opt = pulldown_cmark::Options::empty();
+            opt.insert(pulldown_cmark::Options::ENABLE_TABLES);
+            opt.insert(pulldown_cmark::Options::ENABLE_SMART_PUNCTUATION);
+            opt.insert(pulldown_cmark::Options::ENABLE_HEADING_ATTRIBUTES);
+            opt.insert(pulldown_cmark::Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS);
+            opt
+        });
+
+        let mut context_builder = ContextBuilder::new(&text, &default_template);
+        for (event, range) in parser.into_offset_iter() {
+            context_builder.handle(event, range)?;
         }
 
         let context = context_builder.finalize(state)?;

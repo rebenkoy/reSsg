@@ -23,7 +23,6 @@ pub type EmittedEvent = Vec<(EventKind, Vec<PathBuf>)>;
 
 
 async fn changes_handler(events: EmittedEvent, socket_sender: &mut flume::Sender<EmittedEvent>, config: &reSsgConfig, fs: &Arc<RwLock<rsfs::mem::FS>>) -> anyhow::Result<()> {
-    println!("Got events: {:?}, rebuilding", events);
     let mut new_fs = rsfs::mem::FS::new();
     match build(&config.build, &mut new_fs).map_err(|e| anyhow!(e.to_string())) {
         Ok(_) => {}

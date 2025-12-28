@@ -27,12 +27,12 @@ use actix_web::{
     http::{header, Method},
     HttpResponse,
 };
-use kuchikiki::NodeRef;
 use rsfs::{File, FileType, GenFS, Metadata};
 use crate::server::fileserver::path_buf::PathBufWrap;
+use crate::util::html::HTML;
 
 pub trait ContentMapper {
-    fn map(&self, req: &HttpRequest, path: &PathBuf, content: NodeRef) -> NodeRef;
+    fn map(&self, req: &HttpRequest, path: &PathBuf, content: HTML) -> HTML;
 }
 
 pub struct Files<FS: GenFS> {
