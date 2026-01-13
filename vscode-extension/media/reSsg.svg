@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg width="32px" height="32px" viewBox="0 0 56 56" 
+version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+>
+  <title>reSsg</title>
+  <desc>Created by rebenkoy@.</desc>
+  <defs>
+    <path id="letterBigS" d="M0,0 l13,13 l-14,14 l-7,-7 M0,0 l-13,-13 l14,-14 l7,7" />
+    <path id="letterS" d="M0,0 l5,5 l-5,5 l-5,-5 M0,0 l-5,-5 l5,-5 l5,5" />
+    <path id="letterG" d="M0,0 l5,0 l0,10 l-10,-10 l10,-10"/>
+    <path id="letterE" d="M-10,0 l20,0 l-10,-10 l-10,10 l10,10 l5,-5"/>
+    <path id="letterR" d="M-5,10 l0,-10 l10,0 l-10,-10 l0,10 l5,5"/>
+  </defs>
+  <g transform="translate(15,23)" stroke-width="2" stroke="#ffffff" fill="none">
+    <use href="#letterR" x="-8" y="1" />
+    <use href="#letterE" x="-1" y="13" />
+    <use href="#letterBigS" x="0" y="0"/>
+    <use href="#letterS" x="1" y="-13"/>
+    <use href="#letterG" x="8" y="-1" />
+  </g>
+</svg>

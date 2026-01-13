@@ -8,5 +8,12 @@ WORKDIR /app
 COPY . .
 RUN cargo build --release
 
+FROM node:25.2.1-trixie AS node
+WORKDIR /extension
+COPY ./vscode-extension .
+RUN npm install
+RUN npm run build
+
 FROM mcr.microsoft.com/devcontainers/base:ubuntu AS devcontainer
 COPY --from=build /app/target/release/reSsg /bin/reSsg
+COPY --from=node /extension/build-target/extension.vsix /home/vscode/ressg.vsix
