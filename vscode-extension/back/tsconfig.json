@@ -13,5 +13,17 @@
 		// "noImplicitReturns": true, /* Report error when not all code paths in function return a value. */
 		// "noFallthroughCasesInSwitch": true, /* Report errors for fallthrough cases in switch statement. */
 		// "noUnusedParameters": true,  /* Report errors on unused parameters. */
+		"noUnusedLocals": false,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"incremental": true,
+		"isolatedModules": false,
+		"noFallthroughCasesInSwitch": true,
+		"noImplicitAny": false,
+		"noImplicitReturns": false,
+		"resolveJsonModule": true,
+		"strictNullChecks": false,
+		"useDefineForClassFields": true,
+		"noImplicitOverride": true,
 	}
 }

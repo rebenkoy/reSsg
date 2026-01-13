@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { ChildProcess, spawn } from 'child_process';
 import { dirname } from 'path';
 
-export class ReSsgCoontroller {
+export class ReSsgController {
     controller: AbortController;
     process: ChildProcess | null;
     config_toml: vscode.Uri;
@@ -16,6 +16,7 @@ export class ReSsgCoontroller {
 
     abort() {
         this.controller.abort();
+        this.process.kill('SIGKILL');
     }
     
     respawn() {
@@ -57,9 +58,9 @@ export class ReSsgCoontroller {
     }
 }
 
-export function reSsg_server_watcher(config_toml: vscode.Uri): ReSsgCoontroller {
+export function reSsg_server_watcher(config_toml: vscode.Uri): ReSsgController {
     const controller = new AbortController();
-    const reSsg_controller = new ReSsgCoontroller(config_toml, controller);
+    const reSsg_controller = new ReSsgController(config_toml, controller);
     process.on('exit', (_) => {
         reSsg_controller.abort();
     });

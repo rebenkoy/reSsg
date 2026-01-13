@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import {reSsg_server_watcher, ReSsgCoontroller} from './server-watcher';
+import {ReSsgController as ReSsgController} from './server-watcher';
 import { GitWorks } from './git-works';
 
-export function register_view(file: vscode.Uri | null, context: vscode.ExtensionContext) {
-    const reSsg_view_provider = new ReSsgViewProvider(file, context.extensionUri);
+export function register_view(ressg_controller: ReSsgController, context: vscode.ExtensionContext) {
+    const reSsg_view_provider = new ReSsgViewProvider(ressg_controller, context.extensionUri);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(ReSsgViewProvider.viewType, reSsg_view_provider));
 }
 
@@ -40,32 +40,16 @@ class ReSsgViewProvider implements vscode.WebviewViewProvider {
 	public static readonly viewType = 'reSsg.general';
 
 	private _view?: vscode.WebviewView;
-    private controller: ReSsgCoontroller | null;
+    private controller: ReSsgController | null;
     private updater?: ReturnType<typeof setInterval>;
-    private config_toml: vscode.Uri | null;
     private gitController: GitWorks;
 
 	constructor(
-        file: vscode.Uri | null,
+        ressg_controller: ReSsgController,
 		private readonly _extensionUri: vscode.Uri,
 	) { 
-        this.config_toml = null;
-        this.controller = null;
-        this.setConfigToml(file);
+        this.controller = ressg_controller;
         this.gitController = new GitWorks();
-    }
-
-
-    setConfigToml(file: vscode.Uri | null) {
-        this.config_toml = file;
-        if (file === null) {
-            if (this.controller !== null) {
-                this.controller.abort();
-                this.controller = null;
-            }
-        } else {
-            this.controller = reSsg_server_watcher(file);
-        }
     }
 
 	public resolveWebviewView(

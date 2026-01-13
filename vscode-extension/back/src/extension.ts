@@ -3,6 +3,10 @@
 import * as vscode from 'vscode';
 
 import {register_view} from './view';
+import {reSsg_server_watcher, ReSsgController} from './server-watcher';
+
+let config_toml: vscode.Uri | undefined = undefined;
+let ressg_controller: ReSsgController | undefined = undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -12,9 +16,14 @@ export function activate(context: vscode.ExtensionContext) {
 			if (files.length === 1) {
 				file = files[0];
 			}
-			register_view(file, context);
+			config_toml = file;
 		});
+
+	ressg_controller = reSsg_server_watcher(config_toml);
+	register_view(ressg_controller, context);
 }
 
 // This method is called when your extension is deactivated
-export function deactivate() {}
+export function deactivate() {
+	ressg_controller.abort();
+}

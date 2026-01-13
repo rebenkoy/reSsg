@@ -26,7 +26,7 @@ export class GitWorks {
         let cur = await this.current_branch()
             .catch(err => {
                 console.log(err);
-                Promise.resolve(undefined);
+                return Promise.resolve(undefined);
             });
         if (cur === null || cur === undefined) {
             return false;
@@ -37,7 +37,7 @@ export class GitWorks {
         const branches = await this.simple_api?.branch()
             .catch(err => {
                 console.log(err);
-                Promise.resolve(undefined);
+                return Promise.resolve(undefined);
             });
         if (branches === undefined) {
             return false;
@@ -49,13 +49,13 @@ export class GitWorks {
         await this.simple_api?.checkoutLocalBranch(new_branch)
             .catch(err => {
                 console.log(err);
-                Promise.resolve(undefined);
+                return Promise.resolve(undefined);
             });
 
         cur = await this.current_branch()
             .catch(err => {
                 console.log(err);
-                Promise.resolve(undefined);
+                return Promise.resolve(undefined);
             });
         return cur === new_branch;
     }

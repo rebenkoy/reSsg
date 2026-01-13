@@ -44,8 +44,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./front && tsc -p ./back",
-    "watch": "tsc -watch -p ./front & tsc -watch -p ./back",
+    "compile": "npm run clear && tsc -b ./back -b ./front",
+    "watch": "tsc -watch -p ./back -p ./front",
+    "clear": "rm -rf out",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",
