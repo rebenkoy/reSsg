@@ -17,13 +17,13 @@ export function activate(context: vscode.ExtensionContext) {
 				file = files[0];
 			}
 			config_toml = file;
+		}).then(() => {
+			ressg_controller = reSsg_server_watcher(config_toml);
+			register_view(ressg_controller, context);
 		});
-
-	ressg_controller = reSsg_server_watcher(config_toml);
-	register_view(ressg_controller, context);
 }
 
 // This method is called when your extension is deactivated
 export function deactivate() {
-	ressg_controller.abort();
+	ressg_controller?.abort();
 }
