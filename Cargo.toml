@@ -37,6 +37,7 @@ html5ever = "0.36.1"
 pulldown-cmark = "0.13.0"
 pulldown-cmark-to-cmark = "22.0.0"
 markup5ever_rcdom = "0.36.0+unofficial"
-node-html-parser = "0.1.0"
 kuchikikiki = "0.9.1"
 url = "2.5.7"
+conf = { version = "0.4.5" }
+partially = { version = "0.2.1", features = ["derive"]}
