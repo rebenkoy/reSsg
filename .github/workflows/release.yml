@@ -2,7 +2,9 @@ name: Build
 
 on:
   push:
-    branches: [master]
+    tags:
+      - 'v*' # Trigger on tags starting with 'v'
+
 jobs:
   release:
     name: Release - ${{ matrix.platform.os-name }}
@@ -33,3 +35,4 @@ jobs:
         with:
           executable-name: reSsg
           target: ${{ matrix.platform.target }}
+          extra-files: ''
