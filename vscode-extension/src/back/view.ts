@@ -2,36 +2,11 @@ import * as vscode from 'vscode';
 import {ReSsgController as ReSsgController} from './server-watcher';
 import { GitWorks } from './git-works';
 
+import {Message, Pong, Ping, TellSaveStatus, RequestSaveMessage} from '../common/transport.mjs';
+
 export function register_view(ressg_controller: ReSsgController, context: vscode.ExtensionContext) {
     const reSsg_view_provider = new ReSsgViewProvider(ressg_controller, context.extensionUri);
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(ReSsgViewProvider.viewType, reSsg_view_provider));
-}
-
-interface Message{
-	type: string
-}
-
-class setServerProcessStatusMessage implements Message {
-	type = 'setServerProcessStatus';
-	is_active: boolean;
-	constructor(is_active: boolean) {
-		this.is_active = is_active;
-	}
-}
-class setBranchMessage implements Message {
-	type = 'setBranch';
-	branch_name: string;
-	constructor(branch_name: string) {
-		this.branch_name = branch_name;
-	}
-}
-
-class tellSaveStatus implements Message {
-	type = 'tellSaveStatus';
-	ok: boolean;
-	constructor(ok: boolean) {
-		this.ok = ok;
-	}
 }
 
 
@@ -70,25 +45,24 @@ class ReSsgViewProvider implements vscode.WebviewViewProvider {
         
 		webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-		webviewView.webview.onDidReceiveMessage(data => {
-			switch (data.type) {
-				case 'save':
-					{
-						console.log("Saving:", data);
-						this.gitController.save(data.branch_name, data.commit_message)
-							.then(res => {
-								this.postMessage(new tellSaveStatus(res));
-							});
-						break;
-					}
-			}
-		});
-        
-        this.updater = setInterval(() => {
-            this.updateBranch();
-            this.setServerProcessStatus();
-        }, 1000);
 
+		Message.setTransport((msg) => this.postMessage(msg));
+		RequestSaveMessage.register_callback((msg) => this.handleSaveEvent(msg));
+		Ping.register_callback((msg) => this.handlePing(msg));
+		webviewView.webview.onDidReceiveMessage(data => {
+			Message.process(data);
+		});
+	}
+
+	private handleSaveEvent(msg: RequestSaveMessage) {
+		this.gitController.save(msg.commit_message)
+			.then(res => {
+				new TellSaveStatus(res).post();
+			});
+	}
+
+	private handlePing(msg: Ping) {
+		this.setServerProcessStatus();
 	}
 
     private getServerProcessStatus(): boolean {
@@ -105,29 +79,22 @@ class ReSsgViewProvider implements vscode.WebviewViewProvider {
     }
 
 	public setServerProcessStatus() {
-		this.postMessage(new setServerProcessStatusMessage(this.getServerProcessStatus()));
+		this.getPullRequestLink()
+			.then(pr_link => {
+				new Pong(
+					this.getServerProcessStatus(),
+					pr_link,
+				).post();
+			})
 	}
 
-    public setBranch(branch_name: string) {
-        this.postMessage(new setBranchMessage(branch_name));
-    }
-
-    public updateBranch() {
-        this.gitController.current_branch()
-            .then(branch => {
-                if (branch === undefined || branch === null) {
-                    return;
-                }
-                if (branch === 'master') {
-                    return;
-                }
-                this.setBranch(branch);
-            });
-    }
+	private async getPullRequestLink(): Promise<string | null> {
+		return await this.gitController.get_pr_link();
+	}
 
 	private _getHtmlForWebview(webview: vscode.Webview) {
 		// Get the local path to main script run in the webview, then convert it to a uri we can use in the webview.
-		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'out', 'general.js'));
+		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'out', 'front', 'general.mjs'));
 
 		// Do the same for the stylesheet.
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'reset.css'));
@@ -158,16 +125,17 @@ class ReSsgViewProvider implements vscode.WebviewViewProvider {
 				<title>Cat Colors</title>
 			</head>
 			<body>
-                <div>
-                    Status: <span id="status">undefined</span>
-                </div>
-				
-                <div>
-                    <input placeholder="short description" id="branch-name"></input>
-                    <textarea placeholder="elaborate description of this change" id="commit-message"></textarea>
-                    <button id="save-button" class="" disabled>Save</button>
-                </div>
-
+				<div>
+					<div>
+						Status: <span id="status">undefined</span>
+					</div>
+					
+					<div>
+						<textarea placeholder="what has changed?" id="commit-message"></textarea>
+						<button id="save-button" class="" disabled>Save</button>
+					</div>
+					<a id="pr-link" target="_blank">Approve here</a>
+				</dif>
 				<script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 			</body>
 			</html>`;

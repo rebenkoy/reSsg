@@ -2,43 +2,6 @@ body {
 	background-color: transparent;
 }
 
-.color-list {
-	list-style: none;
-	padding: 0;
-}
-
-.color-entry {
-	width: 100%;
-	display: flex;
-	margin-bottom: 0.4em;
-	border: 1px solid var(--vscode-input-border);
-}
-
-.color-preview {
-	width: 2em;
-	height: 2em;
-}
-
-.color-preview:hover {
-	outline: inset white;
-}
-
-.color-input {
-	display: block;
-	flex: 1;
-	width: 100%;
-	color: var(--vscode-input-foreground);
-	background-color: var(--vscode-input-background);
-	border: none;
-	padding: 0 0.6em;
-}
-
-.add-color-button {
-	display: block;
-	border: none;
-	margin: 0 auto;
-}
-
 #commit-message {
 	field-sizing: content;
 	min-height: 4rem;
@@ -56,5 +19,20 @@ body {
 }
 .save-button--error {
 	background-color: rgb(231, 108, 26) !important;
+}
 
+#pr-link {
+	display: block;
+	width: 100%;
+	padding: 0.25em;
+	align-items: center;
+	text-align: center;
+	text-decoration: none;
+	background-color: var(--vscode-button-background);
+	color: var(--vscode-button-foreground);
+}
+.pr-link--undef {
+	pointer-events: none !important;
+	cursor: not-allowed !important;
+	background-color: var(--vscode-disabledForeground) !important;
 }

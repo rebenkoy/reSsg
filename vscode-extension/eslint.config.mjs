@@ -27,6 +27,7 @@ export default tseslint.config(
 			'@stylistic/semi': ['warn', 'always'],
 			'@typescript-eslint/no-empty-function': 'off',
 			'@typescript-eslint/no-explicit-any': 'off',
+			"@typescript-eslint/no-inferrable-types": 'off',
 			'@typescript-eslint/naming-convention': [
 				'warn',
 				{

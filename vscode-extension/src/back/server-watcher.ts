@@ -16,7 +16,7 @@ export class ReSsgController {
 
     abort() {
         this.controller.abort();
-        this.process.kill('SIGKILL');
+        // this.process.kill('SIGKILL');
     }
     
     respawn() {

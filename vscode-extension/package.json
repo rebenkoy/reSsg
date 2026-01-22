@@ -14,8 +14,9 @@
     "workspaceContains:/config.toml"
   ],
   "extensionDependencies": [
+    "github.vscode-pull-request-github"
   ],
-  "main": "./out/extension.js",
+  "main": "./out/back/extension.js",
   "contributes": {
     "commands": [
       {
@@ -44,8 +45,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "npm run clear && tsc -b ./back -b ./front",
-    "watch": "tsc -watch -p ./back -p ./front",
+    "compile": "npm run clear && tsc",
+    "watch": "tsc -watch",
     "clear": "rm -rf out",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
