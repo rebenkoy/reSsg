@@ -16,7 +16,7 @@
   "extensionDependencies": [
     "github.vscode-pull-request-github"
   ],
-  "main": "./out/back/extension.js",
+  "main": "./out/back/back/extension.js",
   "contributes": {
     "commands": [
       {
@@ -45,9 +45,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "npm run clear && tsc",
-    "watch": "tsc -watch",
     "clear": "rm -rf out",
+    "compile": "tsc -p src/front && tsc -p src/back",
+    "watch": "tsc -watch -p src/front & tsc -watch -p src/back",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
     "test": "vscode-test",

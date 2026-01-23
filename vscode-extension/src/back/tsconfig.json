@@ -2,13 +2,12 @@
 	"compilerOptions": {
 		"module": "nodenext", // "Node16",
 		"target": "ES2022",
-		"outDir": "out",
+		"outDir": "../../out/back",
 		"lib": [
 			"ES2022",
-			"DOM",
 		],
 		"sourceMap": true,
-		"rootDir": "src",
+		"rootDir": "..",
 		"strict": true,   /* enable all strict type-checking options */
 		"skipLibCheck": true,
 

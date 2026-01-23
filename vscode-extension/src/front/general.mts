@@ -1,4 +1,4 @@
-import {Message, Pong, Ping, TellSaveStatus, RequestSaveMessage} from '../common/transport.mjs';
+import {Message, Pong, Ping, TellSaveStatus, RequestSaveMessage} from '../common/transport.js';
 
 (function () {
     enum SaveButtonStyle {

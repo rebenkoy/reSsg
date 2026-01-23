@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
 import {ReSsgController as ReSsgController} from './server-watcher';
 import { GitWorks } from './git-works';
-
-import {Message, Pong, Ping, TellSaveStatus, RequestSaveMessage} from '../common/transport.mjs';
+import {Message, Pong, Ping, TellSaveStatus, RequestSaveMessage} from '../common/transport.js';
 
 export function register_view(ressg_controller: ReSsgController, context: vscode.ExtensionContext) {
     const reSsg_view_provider = new ReSsgViewProvider(ressg_controller, context.extensionUri);
@@ -94,7 +93,7 @@ class ReSsgViewProvider implements vscode.WebviewViewProvider {
 
 	private _getHtmlForWebview(webview: vscode.Webview) {
 		// Get the local path to main script run in the webview, then convert it to a uri we can use in the webview.
-		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'out', 'front', 'general.mjs'));
+		const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'out', 'front', 'front', 'general.mjs'));
 
 		// Do the same for the stylesheet.
 		const styleResetUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', 'reset.css'));
