@@ -12,6 +12,7 @@ FROM node:25.2.1-trixie AS node
 WORKDIR /extension
 COPY ./vscode-extension .
 RUN npm install
+RUN mkdir build-target
 RUN npm run build
 
 FROM mcr.microsoft.com/devcontainers/base:ubuntu AS devcontainer
