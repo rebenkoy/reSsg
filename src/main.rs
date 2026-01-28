@@ -108,3 +108,85 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use minijinja::value::{Value, Object, Enumerator};
+    use minijinja::{Environment, context};
+    use crate::util::md_parser::MdValue;
+
+    #[derive(Debug)]
+    struct User {
+        username: String,
+        roles: Vec<String>,
+    }
+
+    impl Object for User {
+        // The get_value method is called when accessing attributes in a template
+        // (e.g., `user.username`). The key is passed as a &Value.
+        fn get_value(self: &Arc<Self>, key: &Value) -> Option<Value> {
+            match key.as_str()? {
+                "username" => Some(Value::from(&self.username)),
+                "roles" => Some(Value::from(self.roles.clone())),
+                _ => None,
+            }
+        }
+
+        // The enumerate method is used for iteration (e.g., `for key in user`).
+        // It should return an Enumerator over the available keys.
+        fn enumerate(self: &Arc<Self>) -> Enumerator {
+            Enumerator::Str(&["username", "roles"])
+        }
+    }
+
+    #[test]
+    fn main() {
+        let mut env = Environment::new();
+        let user = User {
+            username: "johndoe".to_string(),
+            roles: vec!["user".to_string(), "admin".to_string()],
+        };
+
+        let mdval0 = MdValue::new("asd".to_string());
+        let mdval1 = MdValue::list(vec!["asd".to_string()]);
+        let mdval2 = MdValue::list(vec!["asd".to_string(), "dsa".to_string()]);
+        let mdvalm = MdValue::just_attrs({
+            let mut map = HashMap::new();
+            map.insert(String::from("a"), MdValue::new("asd".to_string()));
+            map.insert(String::from("b"), MdValue::new("bsd".to_string()));
+            map
+        });
+
+        // Add the object to the environment as a global or in the render context
+        env.add_template_owned("profile", r#"
+Hello {{ user.username }}!
+Roles: {{ user.roles }}
+{{ mdval0 }}
+{{ mdval1 }}
+{{ mdval2 }}
+{{ mdvalm }}
+{{ mdval1[0] }}
+{{ mdval2[0] }}
+{{ mdval2[1] }}
+{{ mdvalm["a"] }}
+{{ mdvalm["b"] }}
+        "#).unwrap();
+
+        // The object must be wrapped in an Arc to be managed by MiniJinja's reference counting system
+        let value = Value::from_object(user);
+
+        let tmpl = env.get_template("profile").unwrap();
+        let render_result = tmpl.render(context! {
+            user => value,
+            mdval0 => Value::from_object(mdval0),
+            mdval1 => Value::from_object(mdval1),
+            mdval2 => Value::from_object(mdval2),
+            mdvalm => Value::from_object(mdvalm),
+        }).unwrap();
+
+        println!("{}", render_result);
+        // Output: Hello johndoe! Roles: user, admin
+    }
+}

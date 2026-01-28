@@ -6,7 +6,7 @@ use itertools::Itertools;
 use minijinja::{Error, State};
 use minijinja::value::Object;
 use serde::de::Error as _;
-
+use crate::build::custom_functions::SassState;
 use crate::config::BuildConfig;
 
 pub static RENDERER_STATE: &str = "RENDERER_STATE";
@@ -32,6 +32,9 @@ pub fn lock_state(arc: &Arc<RendererState>) -> Result<MutexGuard<_RendererState>
 pub struct RendererStateParams {
     pub config: BuildConfig,
     pub target_path: PathBuf,
+    pub out_dir: PathBuf,
+    pub out_prefix: PathBuf,
+    pub sass_hash: Option<String>,
     pub static_hashes: HashMap<PathBuf, String>,
 }
 
@@ -48,7 +51,6 @@ impl RendererState {
     pub fn get(&self) -> anyhow::Result<MutexGuard<'_, _RendererState>> {
         self.s.lock().map_err(|e| anyhow!("Could not lock renderer state"))
     }
-
 }
 impl Object for RendererState {}
 
@@ -56,15 +58,21 @@ impl Object for RendererState {}
 pub struct _RendererState {
     pub config: BuildConfig,
     pub target_path: PathBuf,
+    pub out_dir: PathBuf,
+    pub out_prefix: PathBuf,
     pub static_hashes: HashMap<PathBuf, String>,
+    pub requested_sass: SassState,
 }
 impl _RendererState {
     pub fn new(p: RendererStateParams) -> Self {
-        let RendererStateParams { config, target_path, static_hashes } = p;
+        let RendererStateParams { config, target_path, static_hashes, out_dir, out_prefix, sass_hash } = p;
         Self {
             config,
             target_path,
             static_hashes,
+            out_dir,
+            out_prefix,
+            requested_sass: SassState::with_hash(sass_hash),
         }
     }
 }
