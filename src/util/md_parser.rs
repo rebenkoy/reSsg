@@ -80,6 +80,12 @@ impl Object for MdValueMap {
             }
         }
     }
+    fn call(self: &Arc<Self>, state: &State<'_, '_>, args: &[Value]) -> Result<Value, Error> {
+        let key = args.get(0).ok_or(Error::custom("Call must have exactly one argument"))?;
+        Ok(self.attrs.get(key.as_str().ok_or(Error::custom("Call argument must be a string"))?).map(|r| {
+            Value::from_object(r.clone())
+        }).ok_or(Error::custom("No such attribute"))?)
+    }
 
     fn render(self: &Arc<Self>, f: &mut Formatter<'_>) -> std::fmt::Result
     where
