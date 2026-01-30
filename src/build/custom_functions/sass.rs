@@ -24,7 +24,7 @@ pub fn include_sass(state: &State) -> Result<Value, Error> {
     locked_state.requested_sass.requested = true;
     let index_file = locked_state.out_prefix.join(SassState::OUT_NAME);
 
-    let link_elem = format!("<link rel=\"stylesheet\" href=\"{}?hash={}\">", index_file.to_string_lossy(), locked_state.requested_sass.hash);
+    let link_elem = format!("<link rel=\"stylesheet\" href=\"/{}?hash={}\">", index_file.to_string_lossy(), locked_state.requested_sass.hash);
     Ok(Value::from_safe_string(link_elem))
 }
 

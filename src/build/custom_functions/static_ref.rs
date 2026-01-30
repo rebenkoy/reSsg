@@ -26,7 +26,7 @@ pub fn static_ref(state: &State, file: String) -> Result<Value, Error> {
         }
         Some(hash) => {
             format!(
-                "{}?hash={}",
+                "/{}?hash={}",
                 static_ref.display(),
                 hash,
             )
