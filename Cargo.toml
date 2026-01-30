@@ -42,3 +42,4 @@ url = "2.5.7"
 conf = { version = "0.4.5" }
 partially = { version = "0.2.1", features = ["derive"]}
 grass = { version = "0.13.4"}
+lazy_static = "1.5.0"

@@ -6,7 +6,7 @@ use itertools::Itertools;
 use minijinja::{Error, State};
 use minijinja::value::Object;
 use serde::de::Error as _;
-use crate::build::custom_functions::SassState;
+use crate::build::custom_functions::{RemValueState, SassState};
 use crate::config::BuildConfig;
 
 pub static RENDERER_STATE: &str = "RENDERER_STATE";
@@ -36,6 +36,7 @@ pub struct RendererStateParams {
     pub out_prefix: PathBuf,
     pub sass_hash: Option<String>,
     pub static_hashes: HashMap<PathBuf, String>,
+    pub remvalue: RemValueState,
 }
 
 #[derive(Debug)]
@@ -62,10 +63,19 @@ pub struct _RendererState {
     pub out_prefix: PathBuf,
     pub static_hashes: HashMap<PathBuf, String>,
     pub requested_sass: SassState,
+    pub remvalue: RemValueState,
 }
 impl _RendererState {
     pub fn new(p: RendererStateParams) -> Self {
-        let RendererStateParams { config, target_path, static_hashes, out_dir, out_prefix, sass_hash } = p;
+        let RendererStateParams {
+            config,
+            target_path,
+            static_hashes,
+            out_dir,
+            out_prefix,
+            sass_hash,
+            remvalue,
+        } = p;
         Self {
             config,
             target_path,
@@ -73,6 +83,7 @@ impl _RendererState {
             out_dir,
             out_prefix,
             requested_sass: SassState::with_hash(sass_hash),
+            remvalue,
         }
     }
 }

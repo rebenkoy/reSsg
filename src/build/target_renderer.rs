@@ -5,7 +5,16 @@ use crate::config::BuildConfig;
 use minijinja::{context, AutoEscape, Environment, UndefinedBehavior, Value};
 use rsfs::GenFS;
 use serde::{Deserialize, Serialize};
-use crate::build::custom_functions::{blocks, include_sass, sass, try_add_class, SassState};
+use crate::build::custom_functions::{
+    StatefulFunction,
+    blocks,
+    include_sass,
+    sass,
+    try_add_class,
+    RemValueState,
+    push_to_array, collected_array,
+    SassState
+};
 use crate::build::custom_functions::static_ref;
 use crate::build::renderer_state::{RendererState, RendererStateParams, RENDERER_STATE};
 use crate::util::md_parser::MdValue;
@@ -35,7 +44,15 @@ impl BuildTarget {
     }
 }
 
-pub fn prepare_target_env<'a>(config: &BuildConfig, static_hashes: &HashMap<PathBuf, String>, target: &'a BuildTarget, out_dir: PathBuf, out_prefix: PathBuf, sass_hash: Option<String>) -> anyhow::Result<Environment<'a>> {
+pub fn prepare_target_env<'a>(
+    config: &BuildConfig,
+    static_hashes: &HashMap<PathBuf, String>,
+    target: &'a BuildTarget,
+    out_dir: PathBuf,
+    out_prefix: PathBuf,
+    sass_hash: Option<String>,
+    remvalue: RemValueState,
+) -> anyhow::Result<Environment<'a>> {
     fn setup_loader(env: &mut Environment, config: &BuildConfig, target: &BuildTarget) -> anyhow::Result<()> {
         let root_loader = minijinja::path_loader(&config.source);
         let target_loader = minijinja::path_loader(target.dir()?);
@@ -58,8 +75,19 @@ pub fn prepare_target_env<'a>(config: &BuildConfig, static_hashes: &HashMap<Path
         env.add_function("static", static_ref);
         env.add_function("sass", sass);
         env.add_function("include_sass", include_sass);
-    }
-    fn setup_state(env: &mut Environment, config: &BuildConfig, target: &BuildTarget, out_dir: PathBuf, out_prefix: PathBuf, static_hashes: &HashMap<PathBuf, String>, sass_hash: Option<String>) -> anyhow::Result<()> {
+        env.add_function("push_to_array", push_to_array);
+        env.add_function("collected_array", collected_array);
+}
+    fn setup_state(
+        env: &mut Environment,
+        config: &BuildConfig,
+        target: &BuildTarget,
+        out_dir: PathBuf,
+        out_prefix: PathBuf,
+        static_hashes: &HashMap<PathBuf, String>,
+        sass_hash: Option<String>,
+        remvalue: RemValueState,
+    ) -> anyhow::Result<()> {
         env.add_global(RENDERER_STATE, Value::from_object(RendererState::new(RendererStateParams {
             config: config.clone(),
             target_path: target.dir()?.to_path_buf(),
@@ -67,6 +95,7 @@ pub fn prepare_target_env<'a>(config: &BuildConfig, static_hashes: &HashMap<Path
             out_prefix,
             static_hashes: static_hashes.clone(),
             sass_hash,
+            remvalue,
         })));
         Ok(())
     }
@@ -74,7 +103,7 @@ pub fn prepare_target_env<'a>(config: &BuildConfig, static_hashes: &HashMap<Path
     let mut env = Environment::new();
     env.set_undefined_behavior(UndefinedBehavior::Lenient);
     env.set_auto_escape_callback(|name| AutoEscape::None);
-    setup_state(&mut env, &config, &target, out_dir, out_prefix, static_hashes, sass_hash)?;
+    setup_state(&mut env, &config, &target, out_dir, out_prefix, static_hashes, sass_hash, remvalue)?;
     setup_loader(&mut env, &config, &target)?;
     setup_filters(&mut env, &config);
     setup_functions(&mut env, &config);
@@ -87,13 +116,14 @@ pub fn build_target<FS: GenFS>(config: &BuildConfig, static_hashes: &HashMap<Pat
     let index = dir.join("index.html");
     fs.create_dir_all(&dir)?;
 
-    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), PathBuf::from(out_prefix), None)?;
+    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), PathBuf::from(out_prefix), None, RemValueState::default())?;
     let template = env.get_template(&target.config.template)?;
     let ctx = ();
     let (_, state) = template.render_and_return_state(ctx.clone())?;  // Prerender to collect all deferred values.
-    let sass_hash = SassState::build(&state, &dir, fs)?;
+    let sass_hash = SassState::build(&state, fs)?;
+    let remvalue = RemValueState::build(&state, fs)?;
 
-    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), PathBuf::from(out_prefix), sass_hash)?;
+    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), PathBuf::from(out_prefix), sass_hash, remvalue)?;
     let template = env.get_template(&target.config.template)?;
     let state = template.render_to_write(ctx, fs.create_file(index)?)?;
     Ok(())

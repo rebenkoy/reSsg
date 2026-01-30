@@ -7,7 +7,7 @@ use minijinja::{Error, State, Value};
 use rsfs::GenFS;
 use serde::de::Error as _;
 use sha1::{Digest, Sha1};
-use crate::build::renderer_state::{RendererState, _RendererState, get_state, lock_state, RENDERER_STATE};
+use crate::build::renderer_state::{get_state, lock_state};
 
 pub fn sass(state: &State, source_path: String) -> Result<Value, Error> {
     let renderer_state = get_state(state)?;
@@ -52,8 +52,8 @@ impl SassState {
             let mut opts = Default::default();
             // opts.load_paths("");
             grass::from_string(
-                format!("@import {};",
-                        self.files.iter().map(|p| format!("'{}'", p.to_string_lossy())).join(", ")
+                format!("{}",
+                        self.files.iter().map(|p| format!("@use '{}';", p.to_string_lossy())).join("\n")
                 ).to_owned(),
                 &opts
             )
@@ -64,14 +64,15 @@ impl SassState {
         )
     }
 
-    pub fn build<FS: GenFS>(state: &State, dir: &PathBuf, fs: &mut FS) -> Result<Option<String>, anyhow::Error> {
+    pub fn build<FS: GenFS>(state: &State, fs: &mut FS) -> Result<Option<String>, anyhow::Error> {
         let renderer_state = get_state(state)?;
         let locked_state = lock_state(&renderer_state)?;
+        let dir = locked_state.out_dir.clone();
         let s = &locked_state.requested_sass;
         if !s.requested {
             return Ok(None);
         }
-        let mut file_writer = fs.create_file(dir.join("index.css").as_path())?;
+        let mut file_writer = fs.create_file(dir.join(SassState::OUT_NAME).as_path())?;
         let res = s.compile_to_string()?;
         let bytes = res.as_bytes();
 
