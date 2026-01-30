@@ -18,7 +18,11 @@ pub fn static_ref(state: &State, file: String) -> Result<Value, Error> {
     let static_dir = PathBuf::from(&config.static_output);
 
     let static_file = static_dir.join(file);
-    let static_ref = PathBuf::from(&config.prefix).join(&static_file);
+    let mut prefix = config.prefix.clone();
+    if !prefix.starts_with('/') {
+        prefix = format!("/{}", prefix);
+    }
+    let static_ref = PathBuf::from(prefix).join(&static_file);
     Ok(Value::from_safe_string(match static_hashes.get(&static_file) {
         None => {
             log::warn!("Can not find hash for static file {}", static_file.display());
