@@ -111,19 +111,23 @@ pub fn prepare_target_env<'a>(
 }
 
 pub fn build_target<FS: GenFS>(config: &BuildConfig, static_hashes: &HashMap<PathBuf, String>, target: &BuildTarget, fs: &mut FS) -> anyhow::Result<()> {
-    let out_prefix = target.config.path.trim_start_matches("/");
-    let dir = PathBuf::from(&config.output).join(out_prefix);
+    let out_name = target.config.path.trim_start_matches("/");
+    let dir = PathBuf::from(&config.output).join(out_name);
+    let mut out_prefix = PathBuf::from(&config.prefix).join(out_name);
+    if !out_prefix.starts_with("/") {
+        out_prefix = PathBuf::from("/").join(out_prefix);
+    }
     let index = dir.join("index.html");
     fs.create_dir_all(&dir)?;
 
-    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), PathBuf::from(out_prefix), None, RemValueState::default())?;
+    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), out_prefix.clone(), None, RemValueState::default())?;
     let template = env.get_template(&target.config.template)?;
     let ctx = ();
     let (_, state) = template.render_and_return_state(ctx.clone())?;  // Prerender to collect all deferred values.
     let sass_hash = SassState::build(&state, fs)?;
     let remvalue = RemValueState::build(&state, fs)?;
 
-    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), PathBuf::from(out_prefix), sass_hash, remvalue)?;
+    let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), out_prefix, sass_hash, remvalue)?;
     let template = env.get_template(&target.config.template)?;
     let state = template.render_to_write(ctx, fs.create_file(index)?)?;
     Ok(())

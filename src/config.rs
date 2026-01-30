@@ -21,6 +21,15 @@ pub struct reSsgConfig {
     pub build: BuildConfig,
 }
 
+impl reSsgConfig {
+    pub fn patch(&mut self) {
+        
+    }
+    pub fn validate(self) -> Result<Self, anyhow::Error> {
+        Ok(self)
+    }
+}
+
 impl Mergable for reSsgConfig {
     type Partial = PartialreSsgConfig;
     fn merge(&mut self, part: Self::Partial) {
