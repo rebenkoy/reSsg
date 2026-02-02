@@ -18,17 +18,17 @@ use crate::config::{reSsgConfig, EndpointConfig, ControlConfig};
 use crate::server::watcher::Tx;
 
 #[actix_web::main]
-pub async fn serve(config: &reSsgConfig) -> anyhow::Result<()> {
+pub async fn serve(config: &reSsgConfig, working_dir: &PathBuf) -> anyhow::Result<()> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
     match &config.server.control {
         ControlConfig::None => {
-            no_autoreload_serve(config.clone()).await
+            no_autoreload_serve(config.clone(), working_dir).await
         }
         ControlConfig::Endpoint(additional) => {
-            multi_server_serve(config.clone(), additional.clone()).await
+            multi_server_serve(config.clone(), additional.clone(), working_dir).await
         }
         ControlConfig::Prefix(prefix) => {
-            single_server_serve(config.clone(), prefix.clone()).await
+            single_server_serve(config.clone(), prefix.clone(), working_dir).await
         }
     }
 }
@@ -47,11 +47,11 @@ fn build_output_server(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>) -> 
         .run())
 }
 
-async fn no_autoreload_serve(config: reSsgConfig) -> anyhow::Result<()> {
+async fn no_autoreload_serve(config: reSsgConfig, working_dir: &PathBuf) -> anyhow::Result<()> {
     let mut fs = rsfs::mem::FS::new();
-    build(&config.build, &mut fs)?;
+    build(&config.build, &mut fs, working_dir)?;
     let fs = Arc::new(RwLock::new(fs));
-    let (_, watcher) = watcher::build_watcher_tread(&config, fs.clone())?;
+    let (_, watcher) = watcher::build_watcher_tread(&config, fs.clone(), working_dir)?;
 
     let output_server = build_output_server(&config, fs)?;
 
@@ -67,16 +67,16 @@ async fn no_autoreload_serve(config: reSsgConfig) -> anyhow::Result<()> {
     }?;
     Ok(())
 }
-async fn single_server_serve(config: reSsgConfig, socket_prefix: String) -> anyhow::Result<()>  {
+async fn single_server_serve(config: reSsgConfig, socket_prefix: String, working_dir: &PathBuf) -> anyhow::Result<()>  {
     let mut fs = rsfs::mem::FS::new();
-    match build(&config.build, &mut fs) {
+    match build(&config.build, &mut fs, working_dir) {
         Ok(_) => {}
         Err(e) => {
             log::error!("{}", e);
         }
     }
     let fs = Arc::new(RwLock::new(fs));
-    let (rx, watcher) = watcher::build_watcher_tread(&config, fs.clone())?;
+    let (rx, watcher) = watcher::build_watcher_tread(&config, fs.clone(), working_dir)?;
 
     let config_clone = config.clone();
     let combined_server = HttpServer::new(move || {
@@ -105,11 +105,11 @@ async fn single_server_serve(config: reSsgConfig, socket_prefix: String) -> anyh
     }?;
     Ok(())
 }
-async fn multi_server_serve(config: reSsgConfig, socket_config: EndpointConfig) -> anyhow::Result<()> {
+async fn multi_server_serve(config: reSsgConfig, socket_config: EndpointConfig, working_dir: &PathBuf) -> anyhow::Result<()> {
     let mut fs = rsfs::mem::FS::new();
-    build(&config.build, &mut fs)?;
+    build(&config.build, &mut fs, working_dir)?;
     let fs = Arc::new(RwLock::new(fs));
-    let (rx, watcher) = watcher::build_watcher_tread(&config, fs.clone())?;
+    let (rx, watcher) = watcher::build_watcher_tread(&config, fs.clone(), working_dir)?;
 
     let control_server = HttpServer::new(move || {
         App::new()

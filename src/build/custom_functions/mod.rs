@@ -4,6 +4,7 @@ mod try_add_class;
 mod sass;
 mod rem_value;
 mod stateful;
+mod utils;
 
 pub use blocks::blocks;
 pub use static_ref::static_ref;

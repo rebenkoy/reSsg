@@ -4,6 +4,7 @@ mod cli_parser;
 mod server;
 mod util;
 
+use actix_service::ServiceFactoryExt;
 use conf::{Conf, Subcommands};
 use partially::Partial;
 use crate::build::build;
@@ -85,23 +86,31 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let args = Arguments::parse();
 
     std::env::var("RESSG_ROOT").map_or(Ok(()), |dir| {
-        std::env::set_current_dir(dir)
+        std::env::set_current_dir(dir.clone())
+            .map_err(|e| anyhow::anyhow!("Got error `{}` while changing working directory to `{}`", e, dir))
     })?;
+    let working_dir = std::env::current_dir()
+        .map_err(|e| anyhow::anyhow!("Working directory is invalid `{}`", e))?;
 
-    let config_file = std::env::current_dir()?
-        .join("config.toml");
+    let config_file = working_dir
+        .join("ressg-config.toml");
 
-    let mut config: reSsgConfig = toml::from_slice(&std::fs::read(config_file)?)?;
+    let mut config: reSsgConfig = toml::from_slice(
+        &std::fs::read(config_file.clone())
+            .map_err(|e| anyhow::anyhow!("Failed to read config file `{}` with error `{}`", config_file.to_string_lossy(), e))?
+    ).map_err(|e| anyhow::anyhow!("Could not parse config:\n{}", e))?;
+
     config.patch();
-    config = config.validate()?;
+    config = config.validate()
+        .map_err(|e| anyhow::anyhow!("Failed to validate config:\n{}", e))?;
     match args.command {
         Command::Build(cfg) => {
             config.build.merge(cfg);
-            build(&config.build, &mut rsfs::disk::FS {})?;
+            build(&config.build, &mut rsfs::disk::FS {}, &working_dir)?;
         }
         Command::Serve(cfg) => {
             config.merge(cfg);
-            serve(&config)?;
+            serve(&config, &working_dir)?;
         }
     }
     Ok(())

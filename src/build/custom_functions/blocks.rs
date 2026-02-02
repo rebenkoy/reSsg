@@ -1,25 +1,20 @@
 use std::path::{Path, PathBuf};
 use minijinja::{Error, State, Value};
 use serde::de::Error as _;
+use crate::build::custom_functions::utils::{get_canonical_path_for, pop_reason, push_reason};
 use crate::build::renderer_state::{get_state, lock_state, RendererState, RENDERER_STATE};
 use crate::util::error_mappers::map_io_error;
 
 use crate::util::md_parser::Context;
 
-pub fn blocks(state: &State, mut dir: String, default_template: Option<String>) -> Result<Value, Error> {
-    if dir.starts_with("./") {
-        dir = PathBuf::from(state.name()).parent().unwrap_or(Path::new("../../..")).join(dir).to_str().ok_or(
-            Error::custom("Not a valid unicode")
-        )?.to_string();
-    }
-
+pub fn blocks(state: &State, dir: String, default_template: Option<String>) -> Result<Value, Error> {
     let renderer_state = get_state(state)?;
     let locked_state = lock_state(&renderer_state)?;
     let target_root = locked_state.target_path.clone();
     drop(locked_state);
     drop(renderer_state);
 
-    let blocks_dir = target_root.join(dir);
+    let blocks_dir = get_canonical_path_for(&state, &dir)?;
     if !blocks_dir.exists() {
         return Err(Error::custom(format!("Blocks directory `{}` not found.", blocks_dir.display())));
     }
@@ -53,8 +48,12 @@ pub fn blocks(state: &State, mut dir: String, default_template: Option<String>) 
         let text = std::fs::read_to_string(&entry).map_err(map_io_error)?;
         let context = Context::new(&text, &default_template, state.env())?;
 
-        let template = state.env().get_template(context.template.as_str())?;
+        let template = get_canonical_path_for(&state, &context.template)?;
+        push_reason(state, entry)?;
+        let template = state.env().get_template(template.to_str().ok_or(Error::custom("Template is not a valid unicode string"))?)?;
         results.push(template.render(&context)?);
+
+        pop_reason(state)?;
     }
 
     Ok(Value::from_safe_string(results.join("\n")))

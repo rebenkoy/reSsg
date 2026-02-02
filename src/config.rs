@@ -196,9 +196,6 @@ pub struct BuildConfig {
     pub static_path: String,
     #[arg(long)]
     pub static_output: String,
-    #[partially(as_type = "Option<PartialSassConfig>")]
-    #[conf(flatten, long_prefix="sass.")]
-    pub sass: SassConfig,
 }
 
 impl Mergable for BuildConfig {
@@ -211,7 +208,6 @@ impl Mergable for BuildConfig {
         part.prefix.map(|p| self.prefix = p);
         part.static_path.map(|p| self.static_path = p);
         part.static_output.map(|p| self.static_output = p);
-        part.sass.map(|p| self.sass.merge(p));
     }
 }
 
@@ -222,26 +218,3 @@ impl From<PartialBuildConfig> for BuildConfig {
 }
 
 impl Object for BuildConfig {}
-
-#[derive(Partial)]
-#[partially(derive(Conf, Debug))]
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Conf)]
-pub struct SassConfig {
-    #[arg(long)]
-    pub source: String,
-    #[arg(long)]
-    pub destination: String,
-}
-
-impl Mergable for SassConfig {
-    type Partial = PartialSassConfig;
-    fn merge(&mut self, part: Self::Partial) {
-        part.source.map(|p| self.source = p);
-        part.destination.map(|p| self.destination = p);
-    }
-}
-impl From<PartialSassConfig> for SassConfig {
-    fn from(value: PartialSassConfig) -> Self {
-        todo!()
-    }
-}

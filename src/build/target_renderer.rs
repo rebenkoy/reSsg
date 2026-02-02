@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
+use anyhow::anyhow;
 use crate::config::BuildConfig;
 use minijinja::{context, AutoEscape, Environment, UndefinedBehavior, Value};
 use rsfs::GenFS;
@@ -19,28 +20,50 @@ use crate::build::custom_functions::static_ref;
 use crate::build::renderer_state::{RendererState, RendererStateParams, RENDERER_STATE};
 use crate::util::md_parser::MdValue;
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct ProjPaths {
+    pub proj_root: PathBuf,
+    pub src_root: PathBuf,
+}
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct BuildTarget {
-    pub path: PathBuf,
+    pub proj_paths: ProjPaths,
+    pub self_root: PathBuf,
     pub config: TargetConfig,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TargetConfig {
     pub path: String,
     pub template: String,
 }
 
 impl BuildTarget {
-    pub fn new(path: PathBuf) -> anyhow::Result<Self> {
+    pub fn new(proj_paths: ProjPaths, path: PathBuf) -> anyhow::Result<Self> {
         Ok(Self {
+            proj_paths,
             config: toml::from_slice(&fs::read(&path)?)?,
-            path,
+            self_root: path.parent().ok_or(anyhow!("Can not get target root {}", path.to_string_lossy()))?.into(),
         })
     }
-    pub fn dir(&self) -> std::io::Result<PathBuf> {
-        Ok(self.path.parent().ok_or(
-            std::io::Error::new(std::io::ErrorKind::InvalidInput, "No parent dir found")
-        )?.to_path_buf())
+
+    pub fn canonical_path<F: AsRef<str>>(&self, file: F) -> PathBuf {
+        let file = file.as_ref();
+        let file = file.strip_prefix(self.proj_paths.proj_root.to_string_lossy().as_ref()).unwrap_or(file);
+        match file {
+            _ if file.starts_with("/") => {
+                self.proj_paths.proj_root.join(&file[1..])
+            }
+            _ if file.starts_with("$/") => {
+                self.proj_paths.src_root.join(&file[2..])
+            }
+            _ if file.starts_with("~/") => {
+                self.self_root.join(&file[2..])
+            }
+            _ => {
+                self.self_root.join(&file)
+            }
+        }
     }
 }
 
@@ -54,16 +77,16 @@ pub fn prepare_target_env<'a>(
     remvalue: RemValueState,
 ) -> anyhow::Result<Environment<'a>> {
     fn setup_loader(env: &mut Environment, config: &BuildConfig, target: &BuildTarget) -> anyhow::Result<()> {
-        let root_loader = minijinja::path_loader(&config.source);
-        let target_loader = minijinja::path_loader(target.dir()?);
+        let target = (*target).clone();
+        let proj_root_loader = minijinja::path_loader(&target.proj_paths.proj_root);
+        let proj_root = target.proj_paths.proj_root.to_str().ok_or(anyhow!("Can not get proj_root"))?.to_string();
 
         env.set_loader(move |name| {
-            Ok(if name.starts_with("~/") {
-                target_loader(&name[2..])?
-            } else {None}
-                .or(root_loader(name)?)
-                .or(target_loader(name)?)
-            )
+            let real_name = target.canonical_path(name);
+            let tmp = real_name.to_string_lossy();
+            let lookup_name = tmp.as_ref();
+
+            Ok(proj_root_loader(lookup_name.strip_prefix(proj_root.as_str()).unwrap_or(lookup_name))?)
         });
         Ok(())
     }
@@ -88,15 +111,20 @@ pub fn prepare_target_env<'a>(
         sass_hash: Option<String>,
         remvalue: RemValueState,
     ) -> anyhow::Result<()> {
-        env.add_global(RENDERER_STATE, Value::from_object(RendererState::new(RendererStateParams {
+        let mut state = Value::from_object(RendererState::new(RendererStateParams {
             config: config.clone(),
-            target_path: target.dir()?.to_path_buf(),
+            target: target.clone(),
+            target_path: target.self_root.clone(),
             out_dir,
             out_prefix,
             static_hashes: static_hashes.clone(),
             sass_hash,
             remvalue,
-        })));
+        }));
+        state.downcast_object::<RendererState>()
+            .ok_or(anyhow!("Can not downcast rendererState"))?
+            .push_reason(target.self_root.clone())?;
+        env.add_global(RENDERER_STATE, state);
         Ok(())
     }
 
@@ -124,7 +152,7 @@ pub fn build_target<FS: GenFS>(config: &BuildConfig, static_hashes: &HashMap<Pat
     let template = env.get_template(&target.config.template)?;
     let ctx = ();
     let (_, state) = template.render_and_return_state(ctx.clone())?;  // Prerender to collect all deferred values.
-    let sass_hash = SassState::build(&state, fs)?;
+    let sass_hash = SassState::build(&state, fs, &target)?;
     let remvalue = RemValueState::build(&state, fs)?;
 
     let env = prepare_target_env(&config, &static_hashes, &target, dir.clone(), out_prefix, sass_hash, remvalue)?;

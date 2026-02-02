@@ -22,9 +22,9 @@ impl DebounceEventHandler for Tx {
 pub type EmittedEvent = Vec<(EventKind, Vec<PathBuf>)>;
 
 
-async fn changes_handler(events: EmittedEvent, socket_sender: &mut flume::Sender<EmittedEvent>, config: &reSsgConfig, fs: &Arc<RwLock<rsfs::mem::FS>>) -> anyhow::Result<()> {
+async fn changes_handler(events: EmittedEvent, socket_sender: &mut flume::Sender<EmittedEvent>, config: &reSsgConfig, fs: &Arc<RwLock<rsfs::mem::FS>>, working_dir: &PathBuf) -> anyhow::Result<()> {
     let mut new_fs = rsfs::mem::FS::new();
-    match build(&config.build, &mut new_fs).map_err(|e| anyhow!(e.to_string())) {
+    match build(&config.build, &mut new_fs, working_dir).map_err(|e| anyhow!(e.to_string())) {
         Ok(_) => {}
         Err(e) => {
             log::error!("Error while building new files: {}", e);
@@ -36,7 +36,7 @@ async fn changes_handler(events: EmittedEvent, socket_sender: &mut flume::Sender
     Ok(())
 }
 
-pub fn build_watcher_tread(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>) -> anyhow::Result<(flume::Receiver<EmittedEvent>, impl Future<Output = anyhow::Result<()>>)> {
+pub fn build_watcher_tread(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>, working_dir: &PathBuf) -> anyhow::Result<(flume::Receiver<EmittedEvent>, impl Future<Output = anyhow::Result<()>>)> {
     let (socket_sender, socket_reciever) = flume::unbounded();
 
     let (tx, rx) = flume::unbounded();
@@ -46,7 +46,7 @@ pub fn build_watcher_tread(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>)
         .watch(".", RecursiveMode::Recursive)
         .with_context(|| "Can't watch for changes in project root folder. Does it exist, and do you have correct permissions?".to_string())?;
 
-    async fn fun(rx: flume::Receiver<DebounceEventResult>, mut tx: flume::Sender<EmittedEvent>, config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>, guard: Debouncer<RecommendedWatcher, RecommendedCache>) -> anyhow::Result<()> {
+    async fn fun(rx: flume::Receiver<DebounceEventResult>, mut tx: flume::Sender<EmittedEvent>, config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>, guard: Debouncer<RecommendedWatcher, RecommendedCache>, working_dir: &PathBuf) -> anyhow::Result<()> {
         loop {
             match rx.recv_async().await {
                 Ok(Ok(events)) => {
@@ -72,6 +72,7 @@ pub fn build_watcher_tread(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>)
                             &mut tx,
                             &config,
                             &fs,
+                            &working_dir,
                         ).await?;
                     }
                 }
@@ -85,5 +86,5 @@ pub fn build_watcher_tread(config: &reSsgConfig, fs: Arc<RwLock<rsfs::mem::FS>>)
         };
         Ok(())
     }
-    Ok((socket_reciever, fun(rx, socket_sender, &config, fs, debouncer)))
+    Ok((socket_reciever, fun(rx, socket_sender, &config, fs, debouncer, working_dir)))
 }

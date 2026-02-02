@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use crate::config::BuildConfig;
 use rsfs::GenFS;
 use crate::build::{static_files, target_discovery};
@@ -19,11 +20,11 @@ fn prepare_output<FS: GenFS>(path: &String, fs: &mut FS) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn build<FS: GenFS>(config: &BuildConfig, fs: &mut FS) -> anyhow::Result<()> {
+pub fn build<FS: GenFS>(config: &BuildConfig, fs: &mut FS, root_path: &PathBuf) -> anyhow::Result<()> {
     prepare_output(&config.output, fs)?;
     let static_hashes = static_files::build_static(config, fs)?;
 
-    let targets = target_discovery::locate_targets(config)?;
+    let targets = target_discovery::locate_targets(root_path, config)?;
     target_discovery::validate_targets(&targets)?;
 
     for (_, target) in targets.iter() {
