@@ -10,7 +10,7 @@ let ressg_controller: ReSsgController | undefined = undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
-	vscode.workspace.findFiles("config.toml")
+	vscode.workspace.findFiles("ressg-config.toml")
 		.then(files => {
 			let file = null;
 			if (files.length === 1) {
